@@ -1,0 +1,288 @@
+{
+  "info": {
+    "name": "IAM Demo API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Multi-subject auth and session management demo API"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "sessionToken", "value": "" },
+    { "key": "otpCode", "value": "" },
+    { "key": "totpCode", "value": "" },
+    { "key": "targetSessionId", "value": "" },
+    { "key": "passkeyChallengeId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Password Auth",
+      "item": [
+        {
+          "name": "Member Password Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.session_token) pm.collectionVariables.set('sessionToken', data.session_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-forwarded-for", "value": "10.0.0.21" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex@example.com\",\n  \"password\": \"Passw0rd!\",\n  \"role\": \"member\",\n  \"device_name\": \"postman-member-a\",\n  \"remember_device\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/password/login"
+          }
+        },
+        {
+          "name": "Platform Password Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.session_token) pm.collectionVariables.set('sessionToken', data.session_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-forwarded-for", "value": "10.0.0.22" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"platform@example.com\",\n  \"password\": \"Platf0rm!\",\n  \"role\": \"platform_staff\",\n  \"device_name\": \"postman-platform-a\",\n  \"remember_device\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/password/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "OTP Auth",
+      "item": [
+        {
+          "name": "OTP Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.demo_code) pm.collectionVariables.set('otpCode', data.demo_code);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-forwarded-for", "value": "10.0.0.23" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex@example.com\",\n  \"role\": \"community_staff\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/otp/request"
+          }
+        },
+        {
+          "name": "OTP Verify",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.session_token) pm.collectionVariables.set('sessionToken', data.session_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-forwarded-for", "value": "10.0.0.24" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex@example.com\",\n  \"code\": \"{{otpCode}}\",\n  \"role\": \"community_staff\",\n  \"device_name\": \"postman-community-a\",\n  \"remember_device\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/otp/verify"
+          }
+        }
+      ]
+    },
+    {
+      "name": "MFA",
+      "item": [
+        {
+          "name": "TOTP Verify",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{sessionToken}}" },
+              { "key": "Cookie", "value": "session_token={{sessionToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{totpCode}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/mfa/totp/verify"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Session",
+      "item": [
+        {
+          "name": "Current Session",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{sessionToken}}" },
+              { "key": "Cookie", "value": "session_token={{sessionToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/auth/session"
+          }
+        },
+        {
+          "name": "List Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{sessionToken}}" },
+              { "key": "Cookie", "value": "session_token={{sessionToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/sessions"
+          }
+        },
+        {
+          "name": "Revoke Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{sessionToken}}" },
+              { "key": "Cookie", "value": "session_token={{sessionToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/sessions/{{targetSessionId}}"
+          }
+        },
+        {
+          "name": "Revoke Other Sessions",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{sessionToken}}" },
+              { "key": "Cookie", "value": "session_token={{sessionToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/sessions/revoke-others"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{sessionToken}}" },
+              { "key": "Cookie", "value": "session_token={{sessionToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Passkey",
+      "item": [
+        {
+          "name": "Passkey Login Challenge",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.challenge_id) pm.collectionVariables.set('passkeyChallengeId', data.challenge_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-forwarded-for", "value": "10.0.0.25" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex@example.com\",\n  \"role\": \"member\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/passkey/challenge"
+          }
+        },
+        {
+          "name": "Passkey Register Challenge",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.challenge_id) pm.collectionVariables.set('passkeyChallengeId', data.challenge_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{sessionToken}}" },
+              { "key": "Cookie", "value": "session_token={{sessionToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex@example.com\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/passkey/register/challenge"
+          }
+        }
+      ]
+    }
+  ]
+}

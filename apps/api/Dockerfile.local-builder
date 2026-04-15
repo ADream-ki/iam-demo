@@ -1,0 +1,14 @@
+FROM debian:bookworm-slim
+
+COPY --from=rust:latest /usr/local/cargo /usr/local/cargo
+COPY --from=rust:latest /usr/local/rustup /usr/local/rustup
+
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work

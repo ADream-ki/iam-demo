@@ -1,0 +1,122 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: iam
+      POSTGRES_PASSWORD: iam-password
+      POSTGRES_DB: iam_dev
+    ports:
+      - "15433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iam -d iam_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: iam-api-local-builder:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      BIND_ADDR: 0.0.0.0:8080
+      DATABASE_URL: postgres://iam:iam-password@postgres:5432/iam_dev
+      REDIS_URL: redis://redis:6379
+      SESSION_COOKIE_NAME: session_token
+      REFRESH_COOKIE_NAME: refresh_token
+      ACCESS_TOKEN_TTL_MINUTES: 15
+      SESSION_TTL_HOURS: 168
+      # Rate-limit & lockout thresholds
+      PUBLIC_RATE_LIMIT_MAX: 60
+      PUBLIC_RATE_LIMIT_WINDOW_SECONDS: 60
+      LOGIN_FAILURE_LIMIT: 5
+      LOGIN_FAILURE_SOURCE_LIMIT: 20
+      LOGIN_FAILURE_WINDOW_SECONDS: 900
+      # OTP settings — set OTP_CODE_PEPPER to a random secret value in production
+      OTP_REQUEST_LIMIT: 5
+      OTP_REQUEST_WINDOW_SECONDS: 300
+      OTP_CODE_TTL_SECONDS: 600
+      OTP_MAX_ATTEMPTS: 5
+      OTP_RESEND_COOLDOWN_SECONDS: 60
+      OTP_CODE_PEPPER: dev-otp-pepper-change-me-in-production
+      TRUST_PROXY_HEADERS: "false"
+      TRUSTED_ORIGIN: http://localhost:13000
+      RUST_LOG: info
+      CARGO_NET_OFFLINE: "true"
+    ports:
+      - "18082:8080"
+    volumes:
+      - ./apps/api:/work
+      - D:/Rust/.cargo/registry:/usr/local/cargo/registry
+    working_dir: /work
+    command:
+      - /bin/sh
+      - -lc
+      - export PATH=/usr/local/cargo/bin:$$PATH && cargo run -q
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api-test:
+    image: iam-api-local-builder:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: test
+      DATABASE_URL: postgres://iam:iam-password@postgres:5432/iam_dev
+      REDIS_URL: redis://redis:6379
+      OTP_CODE_PEPPER: test-pepper
+      TRUSTED_ORIGIN: http://localhost:13000
+      RUST_LOG: info
+      CARGO_NET_OFFLINE: "true"
+    volumes:
+      - ./apps/api:/work
+      - D:/Rust/.cargo/registry:/usr/local/cargo/registry
+    working_dir: /work
+    command: ["cargo", "test", "--", "--test-threads=1"]
+    restart: "no"
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      INTERNAL_API_BASE_URL: http://api:8080
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:18082
+    ports:
+      - "13000:3000"
+
+volumes:
+  postgres-data:
+  redis-data:

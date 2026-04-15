@@ -1,0 +1,651 @@
+openapi: 3.0.3
+info:
+  title: IAM Demo API
+  version: 0.3.0
+  description: Multi-subject authentication and session management demo API with access/refresh dual-token sessions.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/auth/password/login:
+    post:
+      summary: Password login
+      parameters:
+        - $ref: '#/components/parameters/XForwardedFor'
+        - $ref: '#/components/parameters/XTrustedDeviceToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordLoginRequest'
+      responses:
+        '200':
+          description: Login success
+          headers:
+            Set-Cookie:
+              description: Writes both session_token and refresh_token cookies.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/otp/request:
+    post:
+      summary: Request OTP
+      parameters:
+        - $ref: '#/components/parameters/XForwardedFor'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequest'
+      responses:
+        '200':
+          description: OTP generated or hidden for anti-enumeration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpRequestResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/otp/verify:
+    post:
+      summary: Verify OTP and login
+      parameters:
+        - $ref: '#/components/parameters/XForwardedFor'
+        - $ref: '#/components/parameters/XTrustedDeviceToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpVerifyRequest'
+      responses:
+        '200':
+          description: Login success
+          headers:
+            Set-Cookie:
+              description: Writes both session_token and refresh_token cookies.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/passkey/challenge:
+    post:
+      summary: Begin passkey login
+      parameters:
+        - $ref: '#/components/parameters/XForwardedFor'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyLoginChallengeRequest'
+      responses:
+        '200':
+          description: Challenge issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyChallengeResult'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/passkey/verify:
+    post:
+      summary: Complete passkey login
+      parameters:
+        - $ref: '#/components/parameters/XForwardedFor'
+        - $ref: '#/components/parameters/XTrustedDeviceToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyLoginVerifyRequest'
+      responses:
+        '200':
+          description: Login success
+          headers:
+            Set-Cookie:
+              description: Writes both session_token and refresh_token cookies.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/refresh:
+    post:
+      summary: Refresh access token
+      description: Accepts a refresh token via cookie or X-Refresh-Token header. Partial MFA sessions are not refreshable.
+      parameters:
+        - $ref: '#/components/parameters/XRefreshToken'
+      security:
+        - refreshCookie: []
+      responses:
+        '200':
+          description: Access token refreshed
+          headers:
+            Set-Cookie:
+              description: Rewrites both session_token and refresh_token cookies with rotated tokens.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResult'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/session:
+    get:
+      summary: Get current session
+      security:
+        - bearerAuth: []
+        - accessCookie: []
+      responses:
+        '200':
+          description: Current session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOverview'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/logout:
+    post:
+      summary: Logout current session
+      security:
+        - bearerAuth: []
+        - accessCookie: []
+      responses:
+        '200':
+          description: Logged out
+          headers:
+            Set-Cookie:
+              description: Expires both session_token and refresh_token cookies.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logged_out:
+                    type: boolean
+                    example: true
+                required: [logged_out]
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/mfa/totp/verify:
+    post:
+      summary: Upgrade current session with TOTP MFA
+      security:
+        - bearerAuth: []
+        - accessCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpVerifyRequest'
+      responses:
+        '200':
+          description: MFA upgraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TotpVerifyResult'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/passkey/register/challenge:
+    post:
+      summary: Begin passkey registration
+      security:
+        - bearerAuth: []
+        - accessCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyRegisterChallengeRequest'
+      responses:
+        '200':
+          description: Registration challenge issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyChallengeResult'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/passkey/register/verify:
+    post:
+      summary: Complete passkey registration
+      security:
+        - bearerAuth: []
+        - accessCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyRegisterVerifyRequest'
+      responses:
+        '200':
+          description: Registration success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyRegistrationResult'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/sessions:
+    get:
+      summary: List sessions for current subject
+      security:
+        - bearerAuth: []
+        - accessCookie: []
+      responses:
+        '200':
+          description: Session list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionItem'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/sessions/revoke-others:
+    post:
+      summary: Revoke other sessions for current subject
+      security:
+        - bearerAuth: []
+        - accessCookie: []
+      responses:
+        '200':
+          description: Revocation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked_count:
+                    type: integer
+                    format: int64
+                    example: 2
+                required: [revoked_count]
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/sessions/{session_id}:
+    post:
+      summary: Revoke a single session
+      security:
+        - bearerAuth: []
+        - accessCookie: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Revocation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked:
+                    type: boolean
+                    example: true
+                required: [revoked]
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+components:
+  parameters:
+    XForwardedFor:
+      name: x-forwarded-for
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional client IP hint. Ignored by default and only read when TRUST_PROXY_HEADERS=true.
+    XTrustedDeviceToken:
+      name: X-Trusted-Device-Token
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional opaque trusted-device token used to reuse full MFA for the same identity and subject.
+    XRefreshToken:
+      name: X-Refresh-Token
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional refresh token header accepted by POST /api/auth/refresh.
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: session_token
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+  responses:
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+      required: [status]
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Authentication required
+        request_id:
+          type: string
+          format: uuid
+      required: [error, request_id]
+    SubjectRole:
+      type: string
+      enum: [member, community_staff, platform_staff]
+    MfaLevel:
+      type: string
+      enum: [none, partial, full]
+    PasswordLoginRequest:
+      type: object
+      required: [email, password, role, device_name, remember_device]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        role:
+          $ref: '#/components/schemas/SubjectRole'
+        device_name:
+          type: string
+        remember_device:
+          type: boolean
+    OtpRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/SubjectRole'
+    OtpRequestResult:
+      type: object
+      properties:
+        sent:
+          type: boolean
+        demo_code:
+          type: string
+          nullable: true
+      required: [sent]
+    OtpVerifyRequest:
+      type: object
+      required: [email, code, role, device_name, remember_device]
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+        role:
+          $ref: '#/components/schemas/SubjectRole'
+        device_name:
+          type: string
+        remember_device:
+          type: boolean
+    TotpVerifyRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: Current 6-digit TOTP value from an authenticator app.
+    PasskeyLoginChallengeRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/SubjectRole'
+    PasskeyLoginVerifyRequest:
+      type: object
+      required: [challenge_id, email, role, response, device_name, remember_device]
+      properties:
+        challenge_id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/SubjectRole'
+        response:
+          type: object
+          additionalProperties: true
+        device_name:
+          type: string
+        remember_device:
+          type: boolean
+    PasskeyRegisterChallengeRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Optional legacy field kept for compatibility; server resolves subject from current session.
+    PasskeyRegisterVerifyRequest:
+      type: object
+      required: [challenge_id, response]
+      properties:
+        challenge_id:
+          type: string
+        response:
+          type: object
+          additionalProperties: true
+    PasskeyChallengeResult:
+      type: object
+      properties:
+        challenge_id:
+          type: string
+        public_key:
+          type: object
+          additionalProperties: true
+      required: [challenge_id, public_key]
+    PasskeyRegistrationResult:
+      type: object
+      properties:
+        external_id:
+          type: string
+        label:
+          type: string
+      required: [external_id, label]
+    SessionOverview:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        subject_role:
+          $ref: '#/components/schemas/SubjectRole'
+        display_name:
+          type: string
+        email:
+          type: string
+          format: email
+        mfa_level:
+          $ref: '#/components/schemas/MfaLevel'
+        device_name:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+      required: [session_id, subject_role, display_name, email, mfa_level, device_name, expires_at, current]
+    SessionItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        device_name:
+          type: string
+        user_agent:
+          type: string
+          nullable: true
+        ip:
+          type: string
+          nullable: true
+        mfa_level:
+          $ref: '#/components/schemas/MfaLevel'
+        expires_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+      required: [id, device_name, mfa_level, expires_at, last_seen_at, current]
+    AuthResult:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        access_expires_at:
+          type: string
+          format: date-time
+        refresh_expires_at:
+          type: string
+          format: date-time
+        session:
+          $ref: '#/components/schemas/SessionOverview'
+        dashboard_path:
+          type: string
+        requires_mfa:
+          type: boolean
+        trusted_device_token:
+          type: string
+          nullable: true
+        clear_trusted_device:
+          type: boolean
+      required: [access_token, refresh_token, access_expires_at, refresh_expires_at, session, dashboard_path, requires_mfa, clear_trusted_device]
+    RefreshResult:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        access_expires_at:
+          type: string
+          format: date-time
+        refresh_expires_at:
+          type: string
+          format: date-time
+      required: [access_token, refresh_token, access_expires_at, refresh_expires_at]
+    TotpVerifyResult:
+      type: object
+      properties:
+        session:
+          $ref: '#/components/schemas/SessionOverview'
+        trusted_device_token:
+          type: string
+          nullable: true
+      required: [session]
